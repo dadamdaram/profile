@@ -86,8 +86,8 @@ npm run preview  # 빌드 결과 미리보기
 
 ### 1. Single Source of Truth — `src/constants/profile.ts`
 
-모든 개인정보·프로젝트·스킬 데이터를 **단 하나의 파일**로 관리합니다.  
-콘텐츠 업데이트 시 이 파일만 수정하면 전체 UI에 즉시 반영됩니다.
+모든 개인정보·프로젝트·스킬 데이터를 **단 하나의 파일**로 관리.  
+콘텐츠 업데이트 시 이 파일만 수정하면 전체 UI에 즉시 반영.
 
 ```ts
 // ❌ 안티패턴: 컴포넌트마다 데이터 하드코딩
@@ -98,7 +98,7 @@ export const PROFILE = {
 } as const;
 ```
 
-> **확장 전략**: 향후 Headless CMS나 API로 전환 시 이 파일의 타입 인터페이스(`Project`, `Skill`, `TimelineItem`)만 유지하면 됩니다.
+> **확장 전략** Notion이나 Contentful 같은 CMS, 혹은 백엔드 API로 교체할 때도 이 파일의 타입 인터페이스(`Project`, `Skill`, `TimelineItem`)만 유지하면 됩니다.
 
 ---
 
@@ -168,31 +168,37 @@ return () => cancelAnimationFrame(animationId);
 
 ### 🔧 최적화 항목 상세
 
-#### 1. Canvas rAF — 렌더링 성능
-**문제**: 파티클 애니메이션이 메인 스레드를 점유해 스크롤 버벅임 발생
+4. 성능 최적화 — 왜 이렇게 했는가
+Canvas API로 파티클 구현
+DOM 요소를 수백 개 만들어서 움직이면 브라우저가 매 프레임마다 레이아웃을 다시 계산합니다(Layout Thrashing). Canvas는 픽셀을 직접 그리기 때문에 DOM을 건드리지 않아 훨씬 가볍습니다. requestAnimationFrame(rAF)으로 60fps를 유지하고, 컴포넌트가 화면에서 사라질 때 cancelAnimationFrame을 호출해서 메모리 누수를 막습니다.
+IntersectionObserver vs scroll 이벤트
+scroll 이벤트는 스크롤할 때마다 수십 번씩 발생하고, 그때마다 getBoundingClientRect()를 호출하면 브라우저가 강제로 레이아웃을 계산합니다(Forced Layout). IntersectionObserver는 브라우저가 최적 타이밍에 콜백을 호출해주기 때문에 이 비용이 없습니다.
+rAF 디바운스
+스크롤 프로그레스 바처럼 scroll 이벤트가 꼭 필요한 곳에서는 rAF를 디바운스로 활용했습니다. pending 플래그를 두고, 이미 rAF가 예약된 상태라면 다음 이벤트는 무시합니다. 결과적으로 프레임당 최대 1회만 업데이트됩니다.
+Glassmorphism 성능
+backdrop-filter: blur()는 GPU에서 처리되는데, 많이 쓰면 합성 레이어가 폭증해서 메모리와 페인트 비용이 늘어납니다. will-change 대신 contain: layout을 써서 각 카드의 레이아웃 영향 범위를 격리했습니다.
+prefers-reduced-motion 접근성
+모션에 민감한 사용자는 OS 설정에서 애니메이션 줄이기를 켜둡니다. 이걸 감지해서 애니메이션을 건너뛰고 바로 visible 상태로 초기화합니다.
 
-```js
-// DOM 조작 없이 Canvas API 직접 사용 → Layout Thrashing 0
+🔧 최적화 항목 상세
+1. Canvas rAF — 렌더링 성능
+문제: 파티클 애니메이션이 메인 스레드를 점유해 스크롤 버벅임 발생
+js// DOM 조작 없이 Canvas API 직접 사용 → Layout Thrashing 0
 function animate() {
   ctx.clearRect(0, 0, w, h);
   particles.forEach(p => p.update());
   animId = requestAnimationFrame(animate);
 }
 return () => cancelAnimationFrame(animId); // 메모리 누수 방지
-```
-**결과**: CLS 0, FID 개선
+결과: CLS 0, FID 개선
 
-(* requestAnimationFrame (rAF) & 디바운스?
-: 브라우저의 다음 리페인트 직전에 애니메이션을 업데이트하도록 하는 API.
+requestAnimationFrame(rAF) & 디바운스란?
+브라우저의 다음 리페인트 직전에 애니메이션을 업데이트하도록 예약하는 API입니다. 모니터 주사율(보통 60fps)에 맞춰 실행되므로 화면 밀림 현상을 방지하고, 스크롤 이벤트 발생 시 rAF로 업데이트 횟수를 제한(디바운스)해 스크롤 안정성을 확보합니다. [1]
 
-왜 씀?: 모니터의 주사율(보통 60fps)에 맞춰 실행되므로 화면 밀림 현상 방지. 특히 스크롤 이벤트 발생 시 rAF로 업데이트 횟수 제한(디바운스) → 스크롤 안정성 확보)
 
----
-#### 2. rAF 디바운스 — 스크롤 이벤트
-**문제**: `scroll` 이벤트 과다 발생 → 프레임 드롭
-
-```ts
-const handleScroll = () => {
+2. rAF 디바운스 — 스크롤 이벤트
+문제: scroll 이벤트 과다 발생 → 프레임 드롭
+tsconst handleScroll = () => {
   if (pending) return; // 이미 rAF 예약됨 → 스킵
   pending = true;
   rafId = requestAnimationFrame(() => {
@@ -200,46 +206,29 @@ const handleScroll = () => {
     pending = false;
   });
 };
-```
-**결과**: 프레임당 최대 1회 업데이트 → 스크롤 FPS 안정화
+결과: 프레임당 최대 1회 업데이트 → 스크롤 FPS 안정화
 
----
-
-#### 3. GPU 레이어 제어 — Glassmorphism
-**문제**: `backdrop-filter` 남용 시 GPU 합성 레이어 폭증 → 페인트 비용 급증
-
-```css
-.glass-card {
+3. GPU 레이어 제어 — Glassmorphism
+문제: backdrop-filter 남용 시 GPU 합성 레이어 폭증 → 페인트 비용 급증
+css.glass-card {
   backdrop-filter: blur(16px);
   contain: layout; /* will-change 대신 → 리플로우 격리 */
 }
-```
-**결과**: 카드 다수 뷰에서 TBT 감소
+결과: 카드 다수 뷰에서 TBT 감소
 
-
----
-
-#### 4. IntersectionObserver — 강제 레이아웃 제거
-**문제**: `getBoundingClientRect()` 매 스크롤 호출 → Forced Layout
-
-```ts
-// scroll 이벤트 대신 IntersectionObserver 사용
+4. IntersectionObserver — 강제 레이아웃 제거
+문제: getBoundingClientRect() 매 스크롤 호출 → Forced Layout [2]
+ts// scroll 이벤트 대신 IntersectionObserver 사용
 const observer = new IntersectionObserver(callback, { threshold: 0.1 });
-```
-**결과**: 강제 레이아웃 제거 → LCP 개선
+결과: 강제 레이아웃 제거 → LCP 개선 [3]
 
----
-
-#### 5. `prefers-reduced-motion` — 접근성
-**문제**: 모션 민감 사용자에게 강제 애니메이션 노출 → Accessibility 감점
-
-```ts
-const prefersReduced = window.matchMedia(
+5. prefers-reduced-motion — 접근성
+문제: 모션 민감 사용자에게 강제 애니메이션 노출 → Accessibility 감점
+tsconst prefersReduced = window.matchMedia(
   "(prefers-reduced-motion: reduce)"
 ).matches;
 const [isVisible, setIsVisible] = useState(prefersReduced); // 즉시 true
-```
-**결과**: Accessibility +20pt 개선
+결과: Accessibility +20pt 개선
 
 ---
 
@@ -251,8 +240,8 @@ const [isVisible, setIsVisible] = useState(prefersReduced); // 즉시 true
 |---|------|------|------|
 | **P1** | `cancelAnimationFrame` 오작동 | `rAF ID = 0`을 falsy로 오탐 | `pending` 불리언 플래그로 분리 |
 | **P2** | 모션 민감 사용자 애니메이션 노출 | `prefers-reduced-motion` 미대응 | 즉시 `visible: true` 초기화, Observer 미등록 |
-| **P3** | `useTypewriter` 무한 재실행 | `words` 배열 매 렌더 새 참조 | `wordsRef`로 안정적 참조 유지 |
-| **P4** | SSR 환경 `window is not defined` | `localStorage` 최상위 즉시 실행 | `useState` lazy initializer로 분리 |
+| **P3** | `useTypewriter` 무한 loop | `useEffect 의존성 배열 속 words` 배열. 매 렌더 새 참조 | `wordsRef`로 안정적 참조 유지 |
+| **P4** | SSR 환경 `window is not defined` | `localStorage` 최상위 즉시 실행 | `useState` lazy initializer(함수 형태로 초기값 전달)로 분리, 브라우저에서만 실행 |
 | **P5** | IntersectionObserver 반복 등록 | `sectionIds` 배열 새 참조 | `idsRef` + 마운트 1회 실행 |
 
 ---
