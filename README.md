@@ -160,7 +160,7 @@ return () => cancelAnimationFrame(animationId);
 | Best Practices | 🟢 92 | 🟢 100 |
 | SEO | 🟡 82 | 🟢 100 |
 
-> ※ 실제 측정값으로 업데이트 필요
+
 
 ### 🔧 최적화 항목 상세
 
