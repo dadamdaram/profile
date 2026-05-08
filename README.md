@@ -276,6 +276,29 @@ const [isVisible, setIsVisible] = useState(prefersReduced); // 즉시 true
 | **P5** | IntersectionObserver 반복 등록(매 렌더마다) | `sectionIds` 배열 새 참조 | `idsRef`로 배열 고정 + 마운트 1회만 observer 등록 |
 
 ---
+JS/React는
+ "배열과 객체는 매 렌더마다 새 참조가 생성"
+ 
+JavaScript에서 배열([])과 객체({})는 참조 타입(Reference Type). 
+즉, 값이 같아 보여도 생성될 때마다 메모리 주소가 다른 새 객체가 만들어집니다.
+
+```bash
+[] === []   // false — 내용이 같아도 참조가 다름
+{} === {}   // false
+```
+
+React 컴포넌트가 리렌더될 때마다 함수 본문이 다시 실행되므로, 내부에서 선언된 배열/객체/함수는 매번 새 참조로 재생성
+
+React에서 문제가 되는 이유
+useEffect, useMemo, React.memo 등은 참조 동일성(===) 으로 변경 여부 판단. 배열/객체가 매 렌더마다 새 참조면 "값이 안 바뀌었는데도" 변경됐다고 판단.
+
+
+
+배열/객체를 의존성 배열에 넣어야 할 때 = useMemo로 참조 안정화
+함수를 의존성 배열에 넣어야 할 때 = useCallback으로 참조 안정화
+렌더 사이에 값을 유지하고 싶을 때 = useRef로 참조 고정 (이번 포트폴리오의 P3, P5 해결책)
+컴포넌트 외부 상수 = 컴포넌트 바깥에 선언 → 재생성 자체가 없음
+
 
 ## 📂 대표 프로젝트
 
