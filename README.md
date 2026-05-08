@@ -168,7 +168,6 @@ return () => cancelAnimationFrame(animationId);
 
 ### 🔧 최적화 항목 상세
 
-4. 성능 최적화 — 왜 이렇게 했는가
    
 (1) Canvas API로 파티클 구현
 DOM 요소를 수백 개 만들어서 움직이면 브라우저가 매 프레임마다 레이아웃을 다시 계산합니다(Layout Thrashing).
