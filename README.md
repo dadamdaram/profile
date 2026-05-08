@@ -178,22 +178,13 @@ return () => cancelAnimationFrame(animId); // 메모리 누수 방지
 ```
 **결과**: CLS 0, FID 개선
 
----
+(* requestAnimationFrame (rAF) & 디바운스
+개념: 브라우저의 다음 리페인트 직전에 애니메이션을 업데이트하도록 하는 API입니다.
 
-#### 2. GPU 레이어 제어 — Glassmorphism
-**문제**: `backdrop-filter` 남용 시 GPU 합성 레이어 폭증 → 페인트 비용 급증
+왜 씀?: 모니터의 주사율(보통 60fps)에 맞춰 실행되므로 화면 밀림 현상 방지. 특히 스크롤 이벤트 발생 시 rAF로 업데이트 횟수 제한(디바운스)하여 스크롤 안정성 확보)
 
-```css
-.glass-card {
-  backdrop-filter: blur(16px);
-  contain: layout; /* will-change 대신 → 리플로우 격리 */
-}
-```
-**결과**: 카드 다수 뷰에서 TBT 감소
 
----
-
-#### 3. rAF 디바운스 — 스크롤 이벤트
+#### 2. rAF 디바운스 — 스크롤 이벤트
 **문제**: `scroll` 이벤트 과다 발생 → 프레임 드롭
 
 ```ts
@@ -207,6 +198,21 @@ const handleScroll = () => {
 };
 ```
 **결과**: 프레임당 최대 1회 업데이트 → 스크롤 FPS 안정화
+
+---
+
+#### 3. GPU 레이어 제어 — Glassmorphism
+**문제**: `backdrop-filter` 남용 시 GPU 합성 레이어 폭증 → 페인트 비용 급증
+
+```css
+.glass-card {
+  backdrop-filter: blur(16px);
+  contain: layout; /* will-change 대신 → 리플로우 격리 */
+}
+```
+**결과**: 카드 다수 뷰에서 TBT 감소
+
+---
 
 ---
 
