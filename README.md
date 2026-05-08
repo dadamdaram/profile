@@ -269,11 +269,11 @@ const [isVisible, setIsVisible] = useState(prefersReduced); // 즉시 true
 
 | # | 증상 | 원인 | 해결 |
 |---|------|------|------|
-| **P1** | `cancelAnimationFrame` 오작동 | `rAF ID = 0`을 falsy로 오탐 | `pending` 불리언 플래그로 분리 |
-| **P2** | 모션 민감 사용자 애니메이션 노출 | `prefers-reduced-motion` 미대응 | 즉시 `visible: true` 초기화, Observer 미등록 |
-| **P3** | `useTypewriter` 무한 loop | `useEffect 의존성 배열 속 words` 배열. 매 렌더 새 참조 | `wordsRef`로 안정적 참조 유지 |
+| **P1** | `cancelAnimationFrame` 오작동(애니메이션이 계속 살아있음) | `rAF ID = 0` 반환 가능, js에서 "0 = falsy"로 오탐 | `pending` 불리언 플래그로 분리 |
+| **P2** | 모션 민감 사용자 애니메이션 노출 | `prefers-reduced-motion` 미대응 | 설정 감지 시, `visible: true` 초기화, Observer자체는 미등록 |
+| **P3** | `useTypewriter` 무한 loop | `useEffect 의존성 배열 속 words` 배열을 직접 넣으면, 매 렌더 새 참조값 생성 | `wordsRef`로 안정적 참조 유지(의존성 배열 변하지 x) |
 | **P4** | SSR 환경 `window is not defined` | `localStorage` 최상위 즉시 실행 | `useState` lazy initializer(함수 형태로 초기값 전달)로 분리, 브라우저에서만 실행 |
-| **P5** | IntersectionObserver 반복 등록 | `sectionIds` 배열 새 참조 | `idsRef` + 마운트 1회 실행 |
+| **P5** | IntersectionObserver 반복 등록(매 렌더마다) | `sectionIds` 배열 새 참조 | `idsRef`로 배열 고정 + 마운트 1회만 observer 등록 |
 
 ---
 
