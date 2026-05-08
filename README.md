@@ -169,27 +169,37 @@ return () => cancelAnimationFrame(animationId);
 ### 🔧 최적화 항목 상세
 
 4. 성능 최적화 — 왜 이렇게 했는가
-Canvas API로 파티클 구현
-DOM 요소를 수백 개 만들어서 움직이면 브라우저가 매 프레임마다 레이아웃을 다시 계산합니다(Layout Thrashing). Canvas는 픽셀을 직접 그리기 때문에 DOM을 건드리지 않아 훨씬 가볍습니다. requestAnimationFrame(rAF)으로 60fps를 유지하고, 컴포넌트가 화면에서 사라질 때 cancelAnimationFrame을 호출해서 메모리 누수를 막습니다.
-IntersectionObserver vs scroll 이벤트
+1) Canvas API로 파티클 구현
+DOM 요소를 수백 개 만들어서 움직이면 브라우저가 매 프레임마다 레이아웃을 다시 계산합니다(Layout Thrashing).
+Canvas는 픽셀을 직접 그리기 때문에 DOM을 건드리지 않아 훨씬 가볍습니다. requestAnimationFrame(rAF)으로 60fps를 유지하고, 컴포넌트가 화면에서 사라질 때 cancelAnimationFrame을 호출해서 메모리 누수를 막습니다.
+
+2) IntersectionObserver vs scroll 이벤트
 scroll 이벤트는 스크롤할 때마다 수십 번씩 발생하고, 그때마다 getBoundingClientRect()를 호출하면 브라우저가 강제로 레이아웃을 계산합니다(Forced Layout). IntersectionObserver는 브라우저가 최적 타이밍에 콜백을 호출해주기 때문에 이 비용이 없습니다.
-rAF 디바운스
+
+3) rAF 디바운스
 스크롤 프로그레스 바처럼 scroll 이벤트가 꼭 필요한 곳에서는 rAF를 디바운스로 활용했습니다. pending 플래그를 두고, 이미 rAF가 예약된 상태라면 다음 이벤트는 무시합니다. 결과적으로 프레임당 최대 1회만 업데이트됩니다.
-Glassmorphism 성능
+
+4) Glassmorphism 성능
 backdrop-filter: blur()는 GPU에서 처리되는데, 많이 쓰면 합성 레이어가 폭증해서 메모리와 페인트 비용이 늘어납니다. will-change 대신 contain: layout을 써서 각 카드의 레이아웃 영향 범위를 격리했습니다.
-prefers-reduced-motion 접근성
+
+5) prefers-reduced-motion 접근성
 모션에 민감한 사용자는 OS 설정에서 애니메이션 줄이기를 켜둡니다. 이걸 감지해서 애니메이션을 건너뛰고 바로 visible 상태로 초기화합니다.
 
 🔧 최적화 항목 상세
+
 1. Canvas rAF — 렌더링 성능
 문제: 파티클 애니메이션이 메인 스레드를 점유해 스크롤 버벅임 발생
-js// DOM 조작 없이 Canvas API 직접 사용 → Layout Thrashing 0
+
+```bash
+ DOM 조작 없이 Canvas API 직접 사용 → Layout Thrashing 0
 function animate() {
   ctx.clearRect(0, 0, w, h);
   particles.forEach(p => p.update());
   animId = requestAnimationFrame(animate);
 }
 return () => cancelAnimationFrame(animId); // 메모리 누수 방지
+```
+
 결과: CLS 0, FID 개선
 
 requestAnimationFrame(rAF) & 디바운스란?
@@ -197,7 +207,10 @@ requestAnimationFrame(rAF) & 디바운스란?
 
 
 2. rAF 디바운스 — 스크롤 이벤트
+   
 문제: scroll 이벤트 과다 발생 → 프레임 드롭
+
+```bash
 tsconst handleScroll = () => {
   if (pending) return; // 이미 rAF 예약됨 → 스킵
   pending = true;
@@ -206,29 +219,45 @@ tsconst handleScroll = () => {
     pending = false;
   });
 };
+```
+
 결과: 프레임당 최대 1회 업데이트 → 스크롤 FPS 안정화
 
 3. GPU 레이어 제어 — Glassmorphism
 문제: backdrop-filter 남용 시 GPU 합성 레이어 폭증 → 페인트 비용 급증
+```bash
 css.glass-card {
   backdrop-filter: blur(16px);
   contain: layout; /* will-change 대신 → 리플로우 격리 */
 }
+```
+
 결과: 카드 다수 뷰에서 TBT 감소
 
 4. IntersectionObserver — 강제 레이아웃 제거
+
 문제: getBoundingClientRect() 매 스크롤 호출 → Forced Layout [2]
-ts// scroll 이벤트 대신 IntersectionObserver 사용
+
+```bash
+scroll 이벤트 대신 IntersectionObserver 사용
 const observer = new IntersectionObserver(callback, { threshold: 0.1 });
+```
+
 결과: 강제 레이아웃 제거 → LCP 개선 [3]
 
 5. prefers-reduced-motion — 접근성
+
 문제: 모션 민감 사용자에게 강제 애니메이션 노출 → Accessibility 감점
+
+```bash
+
 tsconst prefersReduced = window.matchMedia(
   "(prefers-reduced-motion: reduce)"
 ).matches;
 const [isVisible, setIsVisible] = useState(prefersReduced); // 즉시 true
 결과: Accessibility +20pt 개선
+```
+
 
 ---
 
